@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortex-docs-sync"
+version = "0.3.0"
+description = "Incremental local mirror of Palo Alto Cortex documentation via the official FluidTopics JSON API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PANW internal tooling" }]
+keywords = ["cortex", "palo-alto", "documentation", "fluidtopics", "rag", "mirror"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+cortex-docs-sync = "cortex_docs_sync.cli:main"
+
+[project.urls]
+Source = "https://github.com/mzalewski87/cortex-docs-sync"
+Issues = "https://github.com/mzalewski87/cortex-docs-sync/issues"
+
+[tool.setuptools.packages.find]
+include = ["cortex_docs_sync*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --strict-markers"

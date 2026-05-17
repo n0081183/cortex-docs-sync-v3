@@ -1,0 +1,6 @@
+{
+  "_comment": "Example: keep each Cloud sub-product in its own directory.",
+  "merge_rules": [
+    {"stem_prefix": "xdr", "output_dir": "xdr"}
+  ]
+}

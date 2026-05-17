@@ -1,0 +1,66 @@
+# cortex-docs-sync v2 — Product Profile Example
+#
+# Use this file to override the built-in registry.
+# Pass it to the CLI with:  cortex-docs-sync --profile docs/profile_example.yaml
+#
+# short_name   : CLI alias (used with --product).  Must be unique and UPPERCASE.
+# full_labels  : List of FluidTopics "Product" metadata values that belong to
+#                this entry.  A publication matches when ANY of its product
+#                tags appears in this list.
+# output_dir   : Subdirectory inside --output-dir where HTML files are written.
+# enabled      : Whether this product is included in the default run (no --product flag).
+#                Set to false to register a product but not run it by default.
+
+products:
+  # ── Core Cortex product lines ──────────────────────────────────────────
+  - short_name: XDR
+    full_labels:
+      - Cortex XDR
+      - Cortex XDR Agent
+    output_dir: xdr
+    enabled: true
+
+  - short_name: XSIAM
+    full_labels:
+      - Cortex XSIAM
+    output_dir: xsiam
+    enabled: true
+
+  - short_name: XSOAR
+    full_labels:
+      - Cortex XSOAR
+    output_dir: xsoar
+    enabled: true
+
+  - short_name: XPANSE
+    full_labels:
+      - Cortex XPANSE
+    output_dir: xpanse
+    enabled: true
+
+  # ── v2 additions ────────────────────────────────────────────────────────
+  - short_name: AGENTIX
+    full_labels:
+      - Cortex AgentiX
+    output_dir: agentix
+    enabled: true
+
+  - short_name: CLOUD
+    full_labels:
+      - Cortex Cloud
+      - Cortex Cloud Runtime Security
+    output_dir: cortex_cloud
+    enabled: true
+
+  - short_name: CDL
+    full_labels:
+      - Cortex Data Lake
+    output_dir: cdl
+    enabled: true
+
+  # ── Example: disabled (registered but not run by default) ───────────────
+  # - short_name: LEGACY
+  #   full_labels:
+  #     - Cortex Legacy Product
+  #   output_dir: legacy
+  #   enabled: false

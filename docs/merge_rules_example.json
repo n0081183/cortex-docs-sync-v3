@@ -1,0 +1,9 @@
+{
+  "_comment": "Custom merge rules for cortex-docs-sync --merge-rules flag.",
+  "_comment2": "Rules are evaluated in order; first match wins.",
+  "_comment3": "stem_prefix matches on the normalised label stem (lowercase, spaces->_).",
+  "merge_rules": [
+    {"stem_prefix": "xdr", "output_dir": "xdr"},
+    {"stem_prefix": "cloud", "output_dir": "cortex_cloud"}
+  ]
+}

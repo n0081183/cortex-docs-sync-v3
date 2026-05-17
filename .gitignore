@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Output of the tool — should not be tracked when this repo is used standalone.
+# Only the literal default output directory is ignored; the source package
+# (`cortex_docs_sync/`) and the tests must remain tracked.
+/cortex_docs/
+
+# Local sync state — tied to a specific machine / consumer
+.cortex_docs_state.json
+**/.cortex_docs_state.json
