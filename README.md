@@ -1,368 +1,192 @@
-# cortex-docs-sync
+cat << 'EOF' > README.md
+# Cortex Docs Sync & AI Vectorization Pipeline 🚀
 
-Incremental local mirror of the Palo Alto **Cortex documentation portal**, driven by the official FluidTopics JSON API. Designed as a feeder for RAG pipelines, search indexes, and other downstream systems that need an up-to-date local copy of Cortex docs without manually downloading anything.
+An end-to-end, fully automated pipeline that creates an incremental local mirror of the Palo Alto Cortex documentation portal and instantly vectorizes it into an embedded Qdrant database using GPU acceleration. 
 
-- **Source:** `https://docs-cortex.paloaltonetworks.com/`
-- **Output:** one self-contained HTML file per publication, organized by product
-- **Dependencies:** only `requests` — works on Python 3.10+
-- **Politeness:** rate-limited (default 1 req/s), exponential backoff, descriptive User-Agent
+Designed for RAG (Retrieval-Augmented Generation) pipelines, search indexes, and autonomous agents that need an up-to-date, AI-ready copy of Cortex docs with **Zero-Touch Cloud Execution** (e.g., RunPod).
 
-## Why this tool exists
+Source: https://docs-cortex.paloaltonetworks.com/
+Output: `cortex_index.tar.gz` (Embedded Qdrant Vector DB) + Self-contained HTML files.
 
+---
+
+## 🌟 What's New: Cloud-Native & GPU AI Engine
+The project has evolved from a simple scraper into a complete data pipeline. 
+
+1. **Zero-SSH Execution:** A single entrypoint (`run_pipeline.sh`) installs dependencies, runs the scraper, triggers the AI worker, and packs the database. Ideal for ephemeral cloud instances.
+2. **GPU-Accelerated Vectorization:** Built-in `worker.py` leverages `onnxruntime-gpu` and `fastembed` to process ~50,000 document segments on an RTX 4090 in seconds.
+3. **Smart Chunking & HTML Cleaning:** Automatically strips noisy HTML tags, chunks text into 300-word segments (with 50-word overlaps), and maps them to product metadata.
+4. **Embedded Qdrant:** Outputs a portable `/tmp/qdrant_sync` directory compressed into `cortex_index.tar.gz`, ready to be downloaded and queried locally without Docker.
+
+---
+
+## ⚡ Quick Start: Cloud Deployment (RunPod / Ubuntu)
+
+To run the complete pipeline (Scraping + AI Vectorization) on a fresh GPU instance:
+
+    # 1. Clone the repository
+    git clone https://github.com/n0081183/cortex-docs-sync-v3.git
+    cd cortex-docs-sync-v3
+
+    # 2. Execute the Master Pipeline Script
+    bash run_pipeline.sh
+
+**Expected Output:**
+Once finished, you will find `cortex_index.tar.gz` in the `/workspace` directory (or `/tmp` if workspace is unavailable). Download this file to your local machine — your AI agent is ready to read Cortex docs!
+
+---
+
+## 🧠 Pipeline Architecture
+
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │  PHASE 1: SCRAPER (cortex_docs_sync)                                   │
+    │  GET /api/khub/maps → Discover Products (XDR, XSOAR, XSIAM...)         │
+    │  Incremental Diff → Fetch only new/changed topics                      │
+    │  Save to: ./cortex_docs/ (HTML files)                                  │
+    └───────────────────────────────────┬────────────────────────────────────┘
+                                        │ triggers automatically
+                                        ▼
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │  PHASE 2: AI WORKER (worker.py)                                        │
+    │  Read HTML → Clean Tags → Smart Chunking (300 words)                   │
+    │  Load multilingual-e5-large to RTX 4090 GPU                            │
+    │  Generate Vectors → Upsert to Embedded Qdrant                          │
+    │  Save to: /workspace/cortex_index.tar.gz                               │
+    └────────────────────────────────────────────────────────────────────────┘
+
+---
+
+## 🕵️ Why this tool exists
 The portal is a single-page application. Visiting a documentation URL returns a ~3 KB JavaScript shell, not the actual content — naive HTML scraping produces nothing useful.
+Behind the SPA, the portal runs FluidTopics 5.1.14, whose JSON API is publicly accessible and explicitly allowed by the portal's own robots.txt. This tool talks to that JSON API. No headless browser, no JS execution.
 
-Behind the SPA, the portal runs FluidTopics 5.1.14, whose JSON API is publicly accessible and **explicitly allowed by the portal's own `robots.txt`**:
-
-```
-Allow: /r/*
-Allow: /api/khub/documents/*/content
-Allow: /sitemap.xml
-```
-
-This tool talks to that JSON API. No headless browser, no JS execution.
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/khub/maps?limit=10000` | Full publication catalog — ~529 entries, fetched in one request |
-| `GET /api/khub/maps/{id}/topics` | Flat topic list per publication |
-| `GET /api/khub/maps/{id}/topics/{tid}/content` | Clean HTML fragment per topic |
+* `GET /api/khub/maps?limit=10000` - Full publication catalog
+* `GET /api/khub/maps/{id}/topics` - Flat topic list per publication
+* `GET /api/khub/maps/{id}/topics/{tid}/content` - Clean HTML fragment per topic
 
 ---
 
-## What's new in v0.3.0 — dynamic catalog discovery
+## 🛠️ Component 1: The Scraper CLI (`cortex_docs_sync`)
 
-Previous versions maintained a hand-curated list of product names in the source code. That list was always one release behind, and products like AgentiX or Cortex Cloud were missing entirely.
+If you only want to download the HTML files without the AI vectorization, you can use the core Python module locally.
 
-**v0.3.0 removes the hard-coded product list entirely.** At startup, the tool fetches the live catalog (one HTTP call), extracts every distinct `Product` label it finds, and builds the product→directory mapping on the fly.
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -e .
 
-As of the last observed catalog state, the portal contains 12 product labels across 529 publications:
+### CLI reference
+`cortex-docs-sync [options]`
 
-```
-Cortex                         cortex_general/
-Cortex AgentiX                 agentix/
-Cortex CLOUD                   cortex_cloud/   ← same dir as "Cortex Cloud"
-Cortex Cloud                   cortex_cloud/
-Cortex Cloud Posture Management cortex_cloud/
-Cortex Cloud Runtime Security  cortex_cloud/
-Cortex IDE                     ide/
-Cortex XDR                     xdr/
-Cortex XDR Agent               xdr/            ← merged with XDR by default
-Cortex XPANSE                  xpanse/
-Cortex XSIAM                   xsiam/
-Cortex XSOAR                   xsoar/
-```
+#### Product selection
+* `--product PRODUCT [...]` Output directory name(s) to sync. Choices are discovered live from the catalog. Default: all products.
+* `--list-products` Fetch the live catalog, print the product→directory table, and exit.
 
-When Palo Alto adds a new product line to the portal, it appears in `--list-products` on the next run and can be synced immediately — no code change needed.
+#### Sync behaviour
+* `--full` Ignore the local state file — re-fetch every matching publication.
+* `--dry-run` List what would be fetched; pulls only the catalog, no content.
+* `--max N` Hard cap on publications (useful for testing).
+* `--rate-limit RPS` Max requests per second (default: 1.0). Be polite for scheduled jobs.
+* `--include-release-notes` Include "Content Update Release Notes", "OSS Listings", etc. (excluded by default).
 
----
+#### Paths
+* `--output-dir PATH` Root of the local mirror (default: `./cortex_docs`).
+* `--state-file PATH` Incremental state file.
+* `--snapshot-cache PATH` Cache the catalog snapshot to a JSON file.
 
-## Quick start
+#### Merge rules
+* `--merge-rules PATH` JSON file with custom merge rules that control which product labels are grouped into the same output directory.
+The default rules collapse all Cortex Cloud* variants into `cortex_cloud/` and Cortex XDR Agent into `xdr/`. Example — keep Cloud sub-products in separate directories:
 
-```bash
-git clone https://github.com/n0081183/cortex-docs-sync.git
-cd cortex-docs-sync
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+    {
+      "merge_rules": [
+        {"stem_prefix": "xdr", "output_dir": "xdr"}
+      ]
+    }
 
-# See what products the live catalog currently contains
-cortex-docs-sync --list-products
+    cortex-docs-sync --merge-rules my_rules.json --list-products
 
-# Dry-run: see what would be downloaded, without fetching any content
-cortex-docs-sync --product xsiam --max 5 --dry-run
+#### Offline / cached mode
+* `--no-catalog` Skip the live catalog fetch; use `--snapshot-cache` instead.
 
-# Download a small sample (~1-2 minutes)
-cortex-docs-sync --product xsiam --max 5 -v
+    # Save snapshot
+    cortex-docs-sync --snapshot-cache .snapshot.json --dry-run
+    # Later, run offline
+    cortex-docs-sync --no-catalog --snapshot-cache .snapshot.json --product xdr
 
-# Re-run — unchanged publications are skipped automatically
-cortex-docs-sync --product xsiam --max 5
-```
-
-> **Note:** `--list-products` always fetches the live catalog first (one lightweight request), so the shown product list is always current.
-
----
-
-## Incremental sync — how it works
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Startup (every run)                                            │
-│                                                                 │
-│  GET /api/khub/maps  (1 request)                               │
-│    → extract all Product labels from 529 publications           │
-│    → apply merge rules → build product→dir map                  │
-│    → CLI choices = unique output directories                    │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ same response reused below
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  For each publication that passes filters:                      │
-│                                                                 │
-│  compare ft:lastTechChange vs local state.json                  │
-│       ↓ unchanged + file exists → SKIP                         │
-│       ↓ new or changed                                          │
-│  GET /topics + GET /content per topic                           │
-│  write HTML → update state.json (atomic)                        │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-The catalog response is **reused** — the initial fetch for product discovery doubles as the sync diff source, so there is no extra network round-trip.
-
-After the first full sync, subsequent runs typically skip every publication and finish in seconds.
+#### Other
+* `--user-agent UA` HTTP User-Agent (override per team / deployment).
+* `--base-url URL` Override portal base URL (testing only).
+* `-v, --verbose` DEBUG-level logging.
 
 ---
 
-## CLI reference
+## 📦 Component 2: The Vectorizer (`worker.py`)
 
-```
-cortex-docs-sync [options]
-```
+The `worker.py` script runs automatically via `run_pipeline.sh`, but can be executed standalone:
 
-### Product selection
+    pip install -r requirements-runpod.txt --break-system-packages
+    python3 worker.py
 
-```
---product PRODUCT [...]
-    Output directory name(s) to sync.
-    Choices are discovered live from the catalog (e.g. xdr, xsiam, agentix).
-    Default: all products found in the catalog.
-
---list-products
-    Fetch the live catalog, print the product→directory table, and exit.
-```
-
-### Sync behaviour
-
-```
---full
-    Ignore the local state file — re-fetch every matching publication.
-
---dry-run
-    List what would be fetched; pulls only the catalog, no content.
-
---max N
-    Hard cap on publications (useful for testing).
-
---rate-limit RPS
-    Max requests per second (default: 1.0). Be polite for scheduled jobs.
-
---include-release-notes
-    Include "Content Update Release Notes", "OSS Listings", and
-    "Analytics Content Releases" (excluded by default — noisy, low-value
-    for RAG use cases).
-```
-
-### Paths
-
-```
---output-dir PATH
-    Root of the local mirror (default: ./cortex_docs).
-
---state-file PATH
-    Incremental state file (default: <output-dir>/.cortex_docs_state.json).
-
---snapshot-cache PATH
-    Cache the catalog snapshot to a JSON file. Reused in offline mode.
-```
-
-### Merge rules
-
-```
---merge-rules PATH
-    JSON file with custom merge rules that control which product labels
-    are grouped into the same output directory.
-    See docs/merge_rules_example.json.
-```
-
-Merge rules let you control directory grouping without touching the source code. The default rules collapse all `Cortex Cloud*` variants into `cortex_cloud/` and `Cortex XDR Agent` into `xdr/`. Everything else gets its own directory named from the label automatically.
-
-Example — keep Cloud sub-products in separate directories:
-
-```json
-{
-  "merge_rules": [
-    {"stem_prefix": "xdr", "output_dir": "xdr"}
-  ]
-}
-```
-
-```bash
-cortex-docs-sync --merge-rules my_rules.json --list-products
-```
-
-### Offline / cached mode
-
-```
---snapshot-cache PATH   Save (or load) the catalog snapshot as JSON.
---no-catalog            Skip the live catalog fetch; use --snapshot-cache instead.
-```
-
-Useful when you want to run without network access, or to freeze the product list for reproducibility:
-
-```bash
-# Save snapshot
-cortex-docs-sync --snapshot-cache .snapshot.json --dry-run
-
-# Later, run offline
-cortex-docs-sync --no-catalog --snapshot-cache .snapshot.json --product xdr
-```
-
-### Other
-
-```
---user-agent UA     HTTP User-Agent (override per team / deployment).
---base-url URL      Override portal base URL (testing only).
--v, --verbose       DEBUG-level logging.
---version           Print version and exit.
-```
+Each vector payload contains `{"title": "doc_name", "product": "xsiam", "text": "chunk_content"}` for targeted RAG filtering.
 
 ---
 
-## Output structure
+## 🧩 Programmatic Use & Integration
 
-```
-cortex_docs/
-├── .cortex_docs_state.json           ← incremental state (do not commit)
-├── xdr/
-│   ├── Cortex-XDR-Documentation__GD6sG6FlxDWxAn13_eZuUQ.html
-│   ├── Cortex-XDR-Agent-Administrator-Guide__<id>.html
-│   └── ...
-├── xsiam/
-│   └── Cortex-XSIAM-Documentation__<id>.html
-├── xsoar/
-│   └── ...
-├── xpanse/
-│   └── ...
-├── agentix/
-│   └── ...
-└── cortex_cloud/
-    └── ...
-```
+### Python API
+    from pathlib import Path
+    from cortex_docs_sync import CatalogSnapshot, CortexDocsClient, PublicationFilter, run_sync
 
-Each HTML file is self-contained: a metadata header with a source deep-link, then one `<section>` per topic with its breadcrumb and topic URL embedded. Downstream parsers preserve those URLs through chunking, so RAG answers can cite `https://docs-cortex.paloaltonetworks.com/r/…` as the source.
-
----
-
-## Integration
-
-### Generic RAG pipeline
-
-1. Run `cortex-docs-sync --output-dir <your-data-dir>` periodically.
-2. Point your parser (Docling, Unstructured, LangChain `DirectoryLoader`, …) at `<your-data-dir>/**/*.html`.
-3. Use `.cortex_docs_state.json` to detect which files changed since the last run and trigger a targeted reindex.
-
-### Programmatic use (no CLI)
-
-```python
-from pathlib import Path
-from cortex_docs_sync import (
-    CatalogSnapshot,
-    CortexDocsClient,
-    PublicationFilter,
-    run_sync,
-)
-
-client = CortexDocsClient()
-publications = client.list_publications()
-
-snapshot = CatalogSnapshot.from_catalog(publications)
-print(snapshot.describe())   # show product→dir table
-
-stats = run_sync(
-    output_dir=Path("./cortex_docs"),
-    state_file=Path("./cortex_docs/.cortex_docs_state.json"),
-    pub_filter=PublicationFilter(products=["Cortex XSIAM", "Cortex AgentiX"]),
-    product_dir_map=snapshot.product_dir_map,
-    preloaded_catalog=publications,   # reuse, no second request
-    rate_limit_rps=1.5,
-)
-print(f"Fetched: {stats.fetched}, skipped: {stats.skipped_unchanged}")
-```
-
-### Scheduled sync — cron
-
-```cron
-# Every weekday at 06:30
-30 6 * * 1-5  cd /opt/your-rag && .venv/bin/cortex-docs-sync >> logs/cortex_sync.log 2>&1
-```
+    client = CortexDocsClient()
+    publications = client.list_publications()
+    snapshot = CatalogSnapshot.from_catalog(publications)
+    
+    stats = run_sync(
+        output_dir=Path("./cortex_docs"),
+        state_file=Path("./cortex_docs/.cortex_docs_state.json"),
+        pub_filter=PublicationFilter(products=["Cortex XSIAM"]),
+        product_dir_map=snapshot.product_dir_map,
+        preloaded_catalog=publications,
+        rate_limit_rps=1.5,
+    )
 
 ### Scheduled sync — GitHub Actions
-
-```yaml
-name: Cortex docs sync
-on:
-  schedule:
-    - cron: "30 6 * * 1-5"
-  workflow_dispatch:
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -e .
-      - run: cortex-docs-sync --output-dir ./cortex_docs
-      # then: push to S3, trigger downstream indexer, etc.
-```
+    name: Cortex docs sync
+    on:
+      schedule:
+        - cron: "30 6 * * 1-5"
+    jobs:
+      sync:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          - uses: actions/setup-python@v5
+            with: { python-version: "3.12" }
+          - run: pip install -e .
+          - run: cortex-docs-sync --output-dir ./cortex_docs
 
 ---
 
-## Performance
+## 🚀 Performance
+~529 publications in the catalog; after default filters roughly 380–400 are synced. Largest publication: ~1244 topics, ~738k words. At 1 req/s, a first full sync takes several hours. Incremental runs finish in seconds.
 
-- ~529 publications in the catalog; after default filters (no Release Notes / OSS Listings) roughly 380–400 are synced depending on selected products.
-- Largest publication: ~1244 topics, ~738k words.
-- At 1 req/s, a **first full sync** of all products takes several hours (rate-limit bound, not server bound). Use `--max` to sample first.
-- **Incremental runs** after the first full sync typically finish in seconds.
-- Bumping `--rate-limit` to 2–3 req/s is reasonable for a one-off backfill. Keep it at 1.0 for scheduled jobs.
+## 💻 Development
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -e ".[dev]"
+    pytest                         # all tests, no network access required
 
----
+## 📂 Project Layout
 
-## Development
+    cortex-docs-sync-v3/
+    ├── run_pipeline.sh                   ← 🚀 MASTER CLOUD ENTRYPOINT
+    ├── worker.py                         ← AI GPU Vectorization Engine
+    ├── requirements-runpod.txt           ← GPU & Qdrant dependencies
+    ├── pyproject.toml
+    ├── README.md
+    ├── cortex_docs_sync/                 ← Core Scraper Package
+    └── tests/                            ← Offline CI-safe test suite
 
-```bash
-# Create and activate venv (recommended)
-python3 -m venv .venv
-source .venv/bin/activate
-
-pip install -e ".[dev]"
-pytest                         # all tests, no network access required
-pytest --cov=cortex_docs_sync  # with coverage
-```
-
-All HTTP traffic is mocked in tests — the suite runs fully offline and is CI-safe.
-
-### Project layout
-
-```
-cortex-docs-sync/
-├── pyproject.toml
-├── README.md
-├── LICENSE                           MIT
-├── docs/
-│   ├── merge_rules_example.json      default merge rules
-│   └── merge_rules_split_cloud.json  example: separate Cloud subdirectories
-├── cortex_docs_sync/
-│   ├── __init__.py                   public API exports
-│   ├── __main__.py                   python -m cortex_docs_sync
-│   ├── catalog.py                    live discovery: labels → CatalogSnapshot
-│   ├── cli.py                        two-phase argparse entry point
-│   ├── client.py                     HTTP client + RateLimiter
-│   ├── html_assembly.py              per-publication HTML builder
-│   ├── models.py                     Publication, PublicationFilter, IngestStats
-│   ├── state.py                      IncrementalState (diff / skip logic)
-│   └── sync.py                       orchestration: catalog → diff → fetch → write
-└── tests/
-    ├── conftest.py
-    ├── test_catalog.py               label normalisation, merge rules, CatalogSnapshot
-    ├── test_html.py
-    ├── test_models.py
-    ├── test_state.py
-    └── test_sync.py
-```
-
----
-
-## License
-
-MIT — see `LICENSE`.
+## 📝 License
+MIT — see LICENSE.
+EOF
