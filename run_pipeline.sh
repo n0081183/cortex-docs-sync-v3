@@ -1,14 +1,18 @@
 #!/bin/bash
 set -e
 
+echo "[SYSTEM] Autodiagnostyka: Sprzątanie wiszących procesów (Zombie Killer)..."
+# Znajduje i bezwzględnie zabija wszelkie stare procesy Pythona, które zablokowały pamięć lub CPU
+pkill -9 -f "python3" || true
+# Dajemy systemowi 2 sekundy na zrzucenie danych z pamięci RAM i VRAM
+sleep 2 
+
 echo "[SYSTEM] Rozpoczynam przygotowanie środowiska RunPod..."
 pip install --break-system-packages -e .
 pip install --break-system-packages fastembed qdrant-client
 
 echo "[SYSTEM] Czyszczenie konfliktów środowiska ONNX..."
-# KRYTYCZNA POPRAWKA: Flaga --break-system-packages pozwala na usunięcie paczki w Ubuntu
 pip uninstall -y --break-system-packages onnxruntime onnxruntime-gpu || true
-
 pip install --break-system-packages --no-cache-dir --force-reinstall onnxruntime-gpu
 
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH

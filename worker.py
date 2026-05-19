@@ -1,5 +1,4 @@
 import os
-# Uciszamy logi onnxruntime
 os.environ["ORT_LOGGING_LEVEL"] = "3"
 
 import tarfile
@@ -85,8 +84,8 @@ def run_ingest():
 
     print(f"[PROGRESS] Potężny RTX 5090 generuje {len(all_chunks)} wektorów...")
     
-    # KRYTYCZNA ZMIANA: Zmniejszamy batch_size do stabilnego 64, aby uniknąć błędów alokacji VRAM
-    embeddings = list(embedding_model.embed(all_chunks, batch_size=64))
+    # OSTATECZNA ZMIANA: Batch size = 16
+    embeddings = list(embedding_model.embed(all_chunks, batch_size=16))
     
     print("[SYSTEM] Zapis do bazy danych wektorowych...")
     points = [PointStruct(id=str(uuid.uuid4()), vector=v.tolist(), payload=all_payloads[i]) for i, v in enumerate(embeddings)]
