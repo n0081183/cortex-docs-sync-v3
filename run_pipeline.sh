@@ -6,13 +6,11 @@ pip install --break-system-packages -e .
 pip install --break-system-packages fastembed qdrant-client
 
 echo "[SYSTEM] Czyszczenie konfliktów środowiska ONNX..."
-# 1. Bezlitośnie usuwamy wszystko z cache i systemu
-pip uninstall -y onnxruntime onnxruntime-gpu || true
+# KRYTYCZNA POPRAWKA: Flaga --break-system-packages pozwala na usunięcie paczki w Ubuntu
+pip uninstall -y --break-system-packages onnxruntime onnxruntime-gpu || true
 
-# 2. Instalujemy czystą wersję GPU omijając cache instalatora
 pip install --break-system-packages --no-cache-dir --force-reinstall onnxruntime-gpu
 
-# 3. KRYTYCZNE: Pokazujemy Pythonowi palcem, gdzie fizycznie na serwerze leżą sterowniki CUDA
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
 echo "[SYSTEM] Faza 1: Pobieranie dokumentacji Cortex..."
