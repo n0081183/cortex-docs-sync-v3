@@ -1,9 +1,10 @@
 import os
-# Uciszamy logi onnxruntime, żeby nie śmieciły w konsoli aplikacji
+# Uciszamy logi onnxruntime, żeby nie śmieciły w konsoli
 os.environ["ORT_LOGGING_LEVEL"] = "3"
 
 import tarfile
 import re
+import shutil
 from pathlib import Path
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
@@ -49,14 +50,18 @@ def run_ingest():
         return
         
     data_dir = Path("/tmp/qdrant_sync")
+    
+    # --- KRYTYCZNA POPRAWKA: Twarde czyszczenie starych blokad ---
+    if data_dir.exists():
+        print("[SYSTEM] Usuwanie starej bazy i porzuconych plików blokady (lock)...")
+        shutil.rmtree(data_dir, ignore_errors=True)
+        
     data_dir.mkdir(parents=True, exist_ok=True)
     
+    # Inicjalizacja na całkowicie czystym folderze
     client = QdrantClient(path=str(data_dir))
     collection_name = "cortex_docs"
     
-    if client.collection_exists(collection_name):
-        client.delete_collection(collection_name)
-        
     client.create_collection(
         collection_name=collection_name,
         vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
@@ -65,9 +70,7 @@ def run_ingest():
     html_files = list(docs_dir.rglob("*.html"))
     print(f"[SYSTEM] Wykryto publikacje: {len(html_files)}")
     
-    # ---------------------------------------------------------
-    # KRYTYCZNA ZMIANA: Wymuszamy akcelerację sprzętową (CUDA)
-    # ---------------------------------------------------------
+    # Wymuszenie sprzętowej akceleracji dla RTX 5090
     embedding_model = TextEmbedding(
         "intfloat/multilingual-e5-large", 
         providers=["CUDAExecutionProvider"]
@@ -85,7 +88,7 @@ def run_ingest():
 
     print(f"[PROGRESS] Potężny RTX 5090 generuje {len(all_chunks)} wektorów...")
     
-    # KRYTYCZNA ZMIANA 2: Zwiększony batch_size na 256 (pozwala na to 32 GB VRAM)
+    # Batch size 256 dla 32 GB VRAM
     embeddings = list(embedding_model.embed(all_chunks, batch_size=256))
     
     print("[SYSTEM] Zapis do bazy danych wektorowych...")
