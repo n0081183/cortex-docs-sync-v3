@@ -65,7 +65,14 @@ def run_ingest():
     html_files = list(docs_dir.rglob("*.html"))
     print(f"[SYSTEM] Wykryto publikacje: {len(html_files)}")
     
-    embedding_model = TextEmbedding("intfloat/multilingual-e5-large")
+    # ---------------------------------------------------------
+    # KRYTYCZNA ZMIANA: Wymuszamy akcelerację sprzętową (CUDA)
+    # ---------------------------------------------------------
+    embedding_model = TextEmbedding(
+        "intfloat/multilingual-e5-large", 
+        providers=["CUDAExecutionProvider"]
+    )
+    
     all_chunks, all_payloads = [], []
     
     for idx, file_path in enumerate(html_files, 1):
@@ -76,8 +83,10 @@ def run_ingest():
                 all_payloads.append({"title": file_path.stem, "product": file_path.parent.name, "text": chunk})
         except: pass
 
-    print(f"[PROGRESS] RTX 4090 generuje {len(all_chunks)} wektorów...")
-    embeddings = list(embedding_model.embed(all_chunks, batch_size=64))
+    print(f"[PROGRESS] Potężny RTX 5090 generuje {len(all_chunks)} wektorów...")
+    
+    # KRYTYCZNA ZMIANA 2: Zwiększony batch_size na 256 (pozwala na to 32 GB VRAM)
+    embeddings = list(embedding_model.embed(all_chunks, batch_size=256))
     
     print("[SYSTEM] Zapis do bazy danych wektorowych...")
     points = [PointStruct(id=str(uuid.uuid4()), vector=v.tolist(), payload=all_payloads[i]) for i, v in enumerate(embeddings)]
