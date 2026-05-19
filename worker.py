@@ -1,5 +1,5 @@
 import os
-# Uciszamy logi onnxruntime, żeby nie śmieciły w konsoli
+# Uciszamy logi onnxruntime
 os.environ["ORT_LOGGING_LEVEL"] = "3"
 
 import tarfile
@@ -51,14 +51,12 @@ def run_ingest():
         
     data_dir = Path("/tmp/qdrant_sync")
     
-    # --- KRYTYCZNA POPRAWKA: Twarde czyszczenie starych blokad ---
     if data_dir.exists():
         print("[SYSTEM] Usuwanie starej bazy i porzuconych plików blokady (lock)...")
         shutil.rmtree(data_dir, ignore_errors=True)
         
     data_dir.mkdir(parents=True, exist_ok=True)
     
-    # Inicjalizacja na całkowicie czystym folderze
     client = QdrantClient(path=str(data_dir))
     collection_name = "cortex_docs"
     
@@ -70,7 +68,6 @@ def run_ingest():
     html_files = list(docs_dir.rglob("*.html"))
     print(f"[SYSTEM] Wykryto publikacje: {len(html_files)}")
     
-    # Wymuszenie sprzętowej akceleracji dla RTX 5090
     embedding_model = TextEmbedding(
         "intfloat/multilingual-e5-large", 
         providers=["CUDAExecutionProvider"]
@@ -88,8 +85,8 @@ def run_ingest():
 
     print(f"[PROGRESS] Potężny RTX 5090 generuje {len(all_chunks)} wektorów...")
     
-    # Batch size 256 dla 32 GB VRAM
-    embeddings = list(embedding_model.embed(all_chunks, batch_size=256))
+    # KRYTYCZNA ZMIANA: Zmniejszamy batch_size do stabilnego 64, aby uniknąć błędów alokacji VRAM
+    embeddings = list(embedding_model.embed(all_chunks, batch_size=64))
     
     print("[SYSTEM] Zapis do bazy danych wektorowych...")
     points = [PointStruct(id=str(uuid.uuid4()), vector=v.tolist(), payload=all_payloads[i]) for i, v in enumerate(embeddings)]
